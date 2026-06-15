@@ -30,6 +30,8 @@ from engine.color_correlation import analyze_color
 from engine.metadata_analysis import analyze_metadata
 from engine.verdict            import compute_verdict
 
+import os
+os.environ['MPLCONFIGDIR'] = '/tmp'
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
