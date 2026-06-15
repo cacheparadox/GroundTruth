@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>PROJECT GROUNDTRUTH — Image Forensics Suite</title>
   <meta name="description" content="Defense-grade image forensics suite. PRNU noise extraction, FFT frequency analysis, Error Level Analysis, and Laplacian anomaly detection — all computed server-side in Python."/>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔍</text></svg>"/>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet"/>
@@ -964,15 +965,31 @@ async function runAnalysis() {
       fetch(`${apiBase}/analyze`, { method: 'POST', body: fd })
     ]);
 
-    setProgress(97, 'Parsing response...');
     if (!response.ok) {
-      const err = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      const respText = await response.text().catch(() => "");
+      let err;
+      try {
+        err = JSON.parse(respText);
+      } catch (e) {
+        err = { error: respText || `HTTP ${response.status}` };
+      }
+      if (err.trace) {
+        console.error("Backend Traceback:\n", err.trace);
+        err.trace.split('\n').forEach(line => {
+          if (line.trim()) appendLog('ERR', line);
+        });
+      } else if (err.error) {
+        console.error("Server Error Response:\n", err.error);
+        // If Vercel returns an HTML error page, display a clean snippet of it
+        const cleanErr = err.error.includes("<html>") ? `HTTP ${response.status} (Internal Server Error)` : err.error;
+        appendLog('ERR', `Server Response: ${cleanErr.substring(0, 300)}`);
+      }
       throw new Error(err.error || `HTTP ${response.status}`);
     }
     data = await response.json();
   } catch (err) {
     setProgress(0, '');
-    appendLog('ERR', `Request failed: ${err.message}`);
+    appendLog('ERR', `Request failed: ${err.message.substring(0, 150)}`);
     appendLog('ERR', 'Check your API URL and ensure the Flask server is running.');
     setEngineLED('err');
     S.scanning = false;
