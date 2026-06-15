@@ -1,10 +1,12 @@
 # Project GroundTruth
 
-Project GroundTruth is a defense-grade image forensics suite designed to detect synthetic patterns (generative AI, GANs, diffusion models) vs organic camera sensor captures. The suite uses a hybrid verification pipeline that aggregates signal-level physical features, frequency artifacts, and texture statistics to compute a unified **Ground Truth Index (GTI)** score.
+Project GroundTruth is an advanced image forensics suite combining 9 analytical engines—including DWT wavelets, block DCT, FFT, and PRNU noise extraction—to verify physical camera capture vs synthetic AI generation (GTI index).
+
+---
 
 ## Forensic Features & Core Engines
 
-The forensic engine calculates the GTI (0% = Synthetic, 100% = Organic) by evaluating 9 active analysis sensors:
+The forensic engine calculates the Ground Truth Index (GTI) (0% = Synthetic, 100% = Organic) by evaluating 9 active analysis sensors:
 
 1. **DWT Subbands (Discrete Wavelet Transform):** Computes a 3-level decomposition using the `db4` wavelet to measure diagonal-to-orthogonal high-frequency energy ratios, flagging upsampling grids.
 2. **DCT Variance (Discrete Cosine Transform):** Runs block-level $8\times 8$ DCT and evaluates first-digit Benford's Law compliance to identify double-compression artifacts and synthetic grids.
@@ -16,24 +18,31 @@ The forensic engine calculates the GTI (0% = Synthetic, 100% = Organic) by evalu
 8. **Laplacian Edge Anomaly:** Detects localized sharpening and structural boundaries (the basis for the **Multizone Anomaly Mask**).
 9. **Metadata Forensics:** Inspects original EXIF tags for software/model signatures of popular AI generators (Stable Diffusion, Midjourney, ComfyUI).
 
+---
+
 ## Tech Stack
 
-* **Backend:** Python, Flask, Flask-CORS, NumPy, SciPy, Scikit-Image, Matplotlib, Pillow, Gunicorn.
-* **Frontend:** Vanilla HTML5, TailwindCSS, HSL custom CSS system, Canvas API, and interactive visual dashboards.
+* **Backend:** Python Serverless (Flask, NumPy, SciPy, Scikit-Image, Matplotlib, Pillow, PyWavelets) hosted on Vercel.
+* **Frontend:** Vanilla HTML5, TailwindCSS, custom HSL CSS theme, Canvas API, and interactive visual dashboards.
 
-## Installation & Deployment
+---
 
-### Backend
-1. Navigate to the `backend` directory.
-2. Install dependencies:
+## Local Development & Deployment
+
+### Local Development
+To run both the frontend and backend locally in a unified environment:
+1. Install the [Vercel CLI](https://vercel.com/cli) globally:
    ```bash
-   pip install -r requirements.txt
+   npm install -g vercel
    ```
-3. Run the development Flask server:
+2. Start the local serverless development environment:
    ```bash
-   python app.py
+   vercel dev
    ```
+   This serves the frontend at `http://localhost:3000` and proxies the Python serverless backend functions under `http://localhost:3000/api`.
 
-### Frontend
-1. Open the root `index.html` directly in a browser or serve it using any static web server (e.g., Live Server).
-2. Configure your API Endpoint URL in the left-hand panel of the visual interface.
+### Deploying to Vercel
+1. Push this clean codebase to a GitHub repository.
+2. In Vercel, import the repository.
+3. Keep the **Application Preset** (Framework Preset) as **Other** (do NOT select "Services" as Vercel Serverless automatically routes `/api` python functions).
+4. Deploy!
