@@ -228,7 +228,7 @@ def analyze():
         elapsed_ms = int((time.time() - t_start) * 1000)
         log("SYS",  f"Analysis complete in {elapsed_ms} ms.")
 
-        return jsonify({
+        payload = {
             "verdict":      verdict,
             "gti":          gti,
             "confidence":   verdict_result["confidence"],
@@ -299,12 +299,31 @@ def analyze():
             "orig_dims":    [orig_w, orig_h],
             "scan_time_ms": elapsed_ms,
             "logs":         logs,
-        })
+        }
+        return jsonify(sanitize_numpy(payload))
 
     except Exception:
         tb = traceback.format_exc()
         log("ERR", f"Unhandled exception:\n{tb}")
-        return jsonify({"error": "Internal server error.", "logs": logs, "trace": tb}), 500
+        return jsonify(sanitize_numpy({"error": "Internal server error.", "logs": logs, "trace": tb})), 500
+
+
+def sanitize_numpy(obj):
+    """Recursively convert NumPy numeric types to standard Python native types."""
+    if isinstance(obj, dict):
+        return {k: sanitize_numpy(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitize_numpy(x) for x in obj]
+    elif isinstance(obj, tuple):
+        return tuple(sanitize_numpy(x) for x in obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.ndarray):
+        return sanitize_numpy(obj.tolist())
+    else:
+        return obj
 
 
 def _pil_to_b64(pil_img: Image.Image) -> str:
