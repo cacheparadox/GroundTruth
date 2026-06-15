@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PROJECT GROUNDTRUTH — Image Forensics Suite</title>
+  <meta name="description" content="Defense-grade image forensics suite. PRNU noise extraction, FFT frequency analysis, Error Level Analysis, and Laplacian anomaly detection — all computed server-side in Python."/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --orange:#FF6A00; --orange-dim:#c24d00;
+      --green:#00FF88;  --green-dim:#00b560;
+      --red:#FF0032;    --blue:#7a9fff;
+      --base:#080b0e;   --panel:#0f1318;
+      --mid:#141920;    --border:#1e2530;
+      --light:#1d2633;  --tx:#c8d8e8;
+      --dim:#4a5a6e;    --acc:#8fa8c0;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    html,body{height:100%;background:var(--base);color:var(--tx);
+      font-family:'JetBrains Mono','Share Tech Mono',monospace;overflow:hidden;}
+    ::-webkit-scrollbar{width:3px;height:3px;}
+    ::-webkit-scrollbar-track{background:transparent;}
+    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+    /* ── Header ── */
+    #hdr{
+      height:48px;background:var(--panel);
+      border-bottom:1px solid var(--border);
+      display:flex;align-items:center;justify-content:space-between;
+      padding:0 16px;position:relative;overflow:hidden;
+    }
+    #hdr::after{
+      content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
+      background:linear-gradient(90deg,transparent,var(--orange) 30%,var(--green) 70%,transparent);
+      animation:hline 5s ease-in-out infinite;
+    }
+    @keyframes hline{0%,100%{opacity:.35}50%{opacity:1}}
+    .logo{font-family:'Orbitron',monospace;font-weight:700;font-size:12px;
+      color:var(--orange);letter-spacing:.22em;}
+    .logo-sub{font-size:7.5px;color:var(--dim);letter-spacing:.15em;
+      font-family:'Share Tech Mono',monospace;margin-top:1px;}
+    .logo-gem{width:26px;height:26px;position:relative;flex-shrink:0;}
+    .logo-gem::before{content:'';position:absolute;inset:0;
+      border:1.5px solid var(--orange);border-radius:2px;transform:rotate(45deg);opacity:.7;}
+    .logo-gem::after{content:'';position:absolute;inset:6px;
+      background:var(--orange);border-radius:1px;transform:rotate(45deg);}
+    .led{display:inline-block;width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+    .led-on{background:var(--green);box-shadow:0 0 6px var(--green);animation:blink-led 2s ease infinite;}
+    .led-warn{background:#ffcc00;box-shadow:0 0 6px #ffcc00;animation:blink-led .8s ease infinite;}
+    .led-err{background:var(--red);box-shadow:0 0 8px var(--red);animation:blink-led .5s ease infinite;}
+    .led-off{background:var(--dim);}
+    @keyframes blink-led{0%,100%{opacity:1}50%{opacity:.25}}
+
+    /* ── Layout ── */
+    #layout{
+      display:grid;
+      grid-template-columns:300px 1fr 270px;
+      height:calc(100vh - 48px);
+      overflow:hidden;
+    }
+
+    /* ── Panels ── */
+    .panel{background:var(--panel);border-right:1px solid var(--border);
+      display:flex;flex-direction:column;overflow:hidden;}
+    #right-col{border-right:none;border-left:1px solid var(--border);}
+
+    .sec-hdr{
+      display:flex;align-items:center;gap:7px;padding:6px 12px;
+      background:var(--mid);border-bottom:1px solid var(--border);
+      font-size:8.5px;letter-spacing:.12em;color:var(--dim);
+      text-transform:uppercase;font-family:'Orbitron',monospace;flex-shrink:0;
+    }
+    .sec-hdr .dot{width:5px;height:5px;border-radius:50%;}
+    .dot-o{background:var(--orange);box-shadow:0 0 5px var(--orange);animation:blink-led 2s ease infinite;}
+    .dot-g{background:var(--green);box-shadow:0 0 5px var(--green);animation:blink-led 1.5s ease infinite;}
+    .dot-d{background:var(--dim);}
+
+    /* ── Dropzone ── */
+    #dropzone{
+      margin:12px;border:2px dashed var(--border);border-radius:5px;
+      padding:24px 12px;text-align:center;cursor:pointer;
+      transition:all .2s ease;position:relative;flex-shrink:0;
+      background:repeating-linear-gradient(45deg,transparent,transparent 10px,
+        rgba(255,106,0,.012) 10px,rgba(255,106,0,.012) 20px);
+    }
+    #dropzone:hover,.drag-over{border-color:var(--orange)!important;
+      box-shadow:0 0 20px rgba(255,106,0,.12),inset 0 0 20px rgba(255,106,0,.04)!important;}
+    .drag-over{border-color:var(--green)!important;
+      box-shadow:0 0 28px rgba(0,255,136,.18),inset 0 0 24px rgba(0,255,136,.05)!important;}
+    .corner{position:absolute;width:11px;height:11px;border-color:var(--orange);border-style:solid;}
+    .tl{top:5px;left:5px;border-width:2px 0 0 2px;}
+    .tr{top:5px;right:5px;border-width:2px 2px 0 0;}
+    .bl{bottom:5px;left:5px;border-width:0 0 2px 2px;}
+    .br{bottom:5px;right:5px;border-width:0 2px 2px 0;}
+    #file-input{display:none;}
+
+    /* ── File info strip ── */
+    #file-info{display:none;margin:0 12px 10px;padding:8px 10px;
+      border:1px solid var(--border);border-radius:3px;background:var(--mid);flex-shrink:0;}
+
+    /* ── Run button ── */
+    #run-btn{
+      margin:0 12px 12px;padding:11px;border-radius:4px;
+      border:1px solid var(--orange);background:rgba(255,106,0,.06);
+      color:var(--orange);font-family:'Orbitron',monospace;font-size:10px;
+      letter-spacing:.15em;cursor:pointer;transition:all .2s ease;
+      text-transform:uppercase;display:flex;align-items:center;
+      justify-content:center;gap:8px;flex-shrink:0;
+    }
+    #run-btn:hover:not(:disabled){background:rgba(255,106,0,.12);
+      box-shadow:0 0 20px rgba(255,106,0,.2);}
+    #run-btn:disabled{opacity:.4;cursor:not-allowed;}
+
+    /* ── Progress bar ── */
+    #progress-section{padding:0 12px 10px;flex-shrink:0;}
+    #progress-track{height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+    #progress-fill{height:100%;width:0%;border-radius:2px;
+      background:linear-gradient(90deg,var(--orange-dim),var(--green));
+      transition:width .15s linear;box-shadow:0 0 6px var(--green);}
+    #progress-label{font-size:8.5px;color:var(--dim);margin-top:4px;
+      font-family:'Share Tech Mono',monospace;letter-spacing:.06em;}
+
+    /* ── API URL config ── */
+    #api-section{padding:0 12px 10px;flex-shrink:0;}
+    #api-input{
+      width:100%;background:var(--mid);border:1px solid var(--border);
+      border-radius:3px;color:var(--acc);padding:5px 8px;font-size:9px;
+      font-family:'Share Tech Mono',monospace;outline:none;
+    }
+    #api-input:focus{border-color:var(--orange);}
+
+    /* ── GTI Gauge ── */
+    #gti-section{padding:12px;flex-shrink:0;}
+    .gti-wrap{display:flex;align-items:center;gap:12px;}
+    #gti-canvas-el{display:block;flex-shrink:0;}
+    .gti-center{position:absolute;top:50%;left:50%;
+      transform:translate(-50%,-50%);text-align:center;}
+    .gti-pct{font-family:'Orbitron',monospace;font-weight:900;font-size:20px;
+      color:var(--green);text-shadow:0 0 12px rgba(0,255,136,.6);line-height:1;}
+    .gti-lbl{font-size:6.5px;color:var(--dim);letter-spacing:.1em;
+      font-family:'Orbitron',monospace;}
+    .gti-stats{flex:1;}
+    .gs-row{display:flex;justify-content:space-between;font-size:8.5px;
+      color:var(--dim);padding:2.5px 0;border-bottom:1px solid rgba(30,37,48,.5);}
+    .gs-val{color:var(--acc);font-family:'Share Tech Mono',monospace;}
+
+    /* ── Verdict ── */
+    #verdict-wrap{padding:0 12px 10px;flex-shrink:0;}
+    #verdict-badge{
+      border:1px solid var(--border);border-radius:4px;padding:10px;
+      text-align:center;font-family:'Orbitron',monospace;background:var(--mid);
+      transition:all .4s ease;
+    }
+    #verdict-badge.organic{border-color:var(--green);color:var(--green);
+      background:rgba(0,255,136,.04);
+      box-shadow:0 0 22px rgba(0,255,136,.15),inset 0 0 18px rgba(0,255,136,.04);
+      animation:vp-g 2.5s ease infinite;}
+    #verdict-badge.synthetic{border-color:var(--red);color:var(--red);
+      background:rgba(255,0,50,.04);
+      box-shadow:0 0 24px rgba(255,0,50,.2),inset 0 0 18px rgba(255,0,50,.05);
+      animation:vp-r 1.5s ease infinite;}
+    @keyframes vp-g{0%,100%{box-shadow:0 0 22px rgba(0,255,136,.15)}
+      50%{box-shadow:0 0 38px rgba(0,255,136,.3)}}
+    @keyframes vp-r{0%,100%{box-shadow:0 0 22px rgba(255,0,50,.2)}
+      50%{box-shadow:0 0 42px rgba(255,0,50,.4)}}
+    #verdict-icon{font-size:16px;margin-bottom:3px;}
+    #verdict-text{font-size:10px;font-weight:700;letter-spacing:.18em;}
+    #verdict-sub{font-size:7.5px;margin-top:2px;opacity:.65;letter-spacing:.07em;}
+
+    /* ── Score cards ── */
+    #scores-section{padding:0 12px 10px;display:grid;grid-template-columns:1fr 1fr;
+      gap:6px;flex-shrink:0;}
+    .score-card{background:var(--mid);border:1px solid var(--border);
+      border-radius:4px;padding:8px 10px;}
+    .sc-label{font-size:7px;color:var(--dim);letter-spacing:.1em;
+      text-transform:uppercase;font-family:'Orbitron',monospace;}
+    .sc-val{font-size:18px;font-weight:700;font-family:'Orbitron',monospace;
+      line-height:1.2;margin:2px 0;}
+    .sc-bar-track{height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+    .sc-bar{height:100%;border-radius:2px;transition:width 1s ease;width:0%;}
+    .sc-bar.g{background:var(--green);box-shadow:0 0 5px var(--green);}
+    .sc-bar.o{background:var(--orange);box-shadow:0 0 5px var(--orange);}
+    .sc-bar.b{background:var(--blue);box-shadow:0 0 5px var(--blue);}
+    .sc-bar.r{background:var(--red);box-shadow:0 0 5px var(--red);}
+
+    /* ── Terminal ── */
+    #terminal-section{flex:1;display:flex;flex-direction:column;min-height:0;}
+    #terminal{flex:1;overflow-y:auto;padding:8px 10px;font-size:9px;
+      line-height:1.8;font-family:'Share Tech Mono',monospace;
+      background:#060809;min-height:0;}
+    .log-line{display:flex;gap:7px;animation:log-in .12s ease;}
+    @keyframes log-in{from{opacity:0;transform:translateX(-5px)}to{opacity:1;transform:translateX(0)}}
+    .l-ts{color:#2a3a4a;flex-shrink:0;}
+    .l-tag{flex-shrink:0;font-weight:700;}
+    .t-sys{color:var(--orange)}.t-math{color:var(--blue)}
+    .t-ok{color:var(--green)}.t-warn{color:#ffcc00}.t-err{color:var(--red)}
+    .l-msg{color:#607080;word-break:break-word;}
+    #tc{display:inline-block;width:6px;height:11px;background:var(--green);
+      vertical-align:middle;animation:cursor-blink 1s step-end infinite;margin-left:3px;}
+    @keyframes cursor-blink{0%,100%{opacity:1}50%{opacity:0}}
+
+    /* ── Centre panel ── */
+    #centre{display:flex;flex-direction:column;overflow:hidden;background:var(--base);}
+
+    /* ── Tab bar ── */
+    #tab-bar{
+      display:flex;align-items:stretch;background:var(--panel);
+      border-bottom:1px solid var(--border);flex-shrink:0;
+      overflow-x:auto;scrollbar-width:none;
+    }
+    #tab-bar::-webkit-scrollbar{display:none;}
+    .tab-btn{
+      padding:8px 14px;font-size:8.5px;font-family:'Orbitron',monospace;
+      letter-spacing:.1em;text-transform:uppercase;color:var(--dim);
+      cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;
+      transition:all .15s ease;white-space:nowrap;
+    }
+    .tab-btn:hover{color:var(--acc);}
+    .tab-btn.active{color:var(--orange);border-bottom-color:var(--orange);}
+    #tab-meta{margin-left:auto;display:flex;align-items:center;gap:10px;
+      padding:0 12px;font-size:8.5px;color:var(--dim);
+      font-family:'Share Tech Mono',monospace;}
+    #scan-track{width:100px;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+    #scan-fill{height:100%;width:0%;
+      background:linear-gradient(90deg,var(--orange-dim),var(--green));
+      transition:width .1s linear;box-shadow:0 0 5px var(--green);}
+
+    /* ── Canvas area ── */
+    #canvas-area{flex:1;position:relative;overflow:hidden;display:flex;
+      align-items:center;justify-content:center;
+      background:
+        radial-gradient(ellipse at center,rgba(0,255,136,.015) 0%,transparent 65%),
+        repeating-linear-gradient(0deg,transparent,transparent 39px,
+          rgba(30,37,48,.25) 39px,rgba(30,37,48,.25) 40px),
+        repeating-linear-gradient(90deg,transparent,transparent 39px,
+          rgba(30,37,48,.25) 39px,rgba(30,37,48,.25) 40px),
+        var(--base);}
+
+    /* ── Empty state ── */
+    #empty-state{position:absolute;inset:0;display:flex;flex-direction:column;
+      align-items:center;justify-content:center;gap:14px;color:var(--dim);pointer-events:none;}
+    .es-icon{width:80px;height:80px;border:1px solid var(--border);border-radius:6px;
+      display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;
+      background:linear-gradient(135deg,rgba(255,106,0,.03),rgba(0,255,136,.03));}
+    .es-scan{position:absolute;left:0;right:0;height:1px;
+      background:linear-gradient(90deg,transparent,var(--green),transparent);
+      animation:es-sweep 2.5s ease-in-out infinite;opacity:.4;}
+    @keyframes es-sweep{0%{top:0%}100%{top:100%}}
+    #es-title{font-family:'Orbitron',monospace;font-size:11px;
+      letter-spacing:.15em;color:var(--acc);}
+    #es-sub{font-size:9px;letter-spacing:.06em;text-align:center;
+      max-width:300px;line-height:1.7;}
+
+    /* ── Image display ── */
+    #img-container{
+      position:relative;max-width:100%;max-height:100%;
+      box-shadow:0 0 0 1px var(--border),0 0 50px rgba(0,0,0,.8);display:none;
+    }
+    #img-container::after{
+      content:'';position:absolute;inset:0;pointer-events:none;
+      border:1px solid rgba(30,37,48,.8);z-index:2;
+    }
+    /* corner bracket */
+    #img-container::before{
+      content:'';position:absolute;top:0;left:0;
+      width:18px;height:18px;border-top:2px solid var(--orange);
+      border-left:2px solid var(--orange);pointer-events:none;z-index:3;
+    }
+    #display-img{max-width:100%;max-height:calc(100vh - 180px);
+      display:block;object-fit:contain;}
+    #scan-overlay{position:absolute;top:0;left:0;right:0;bottom:0;
+      pointer-events:none;z-index:5;display:none;}
+    #scan-line{position:absolute;left:0;right:0;height:3px;
+      background:linear-gradient(90deg,transparent,rgba(0,255,136,.8),
+        rgba(255,255,255,.95),rgba(0,255,136,.8),transparent);
+      box-shadow:0 0 18px var(--green),0 0 4px rgba(255,255,255,.5);
+      transition:top .05s linear;}
+    #scan-glow{position:absolute;left:0;right:0;height:40px;
+      background:linear-gradient(180deg,rgba(0,255,136,.08),transparent);
+      transition:top .05s linear;}
+
+    /* ── Pixel HUD ── */
+    #pixel-hud{position:absolute;bottom:8px;right:8px;
+      font-size:8.5px;font-family:'Share Tech Mono',monospace;color:var(--dim);
+      background:rgba(8,11,14,.85);border:1px solid var(--border);
+      border-radius:3px;padding:4px 8px;display:none;gap:10px;}
+    #pixel-hud.show{display:flex;}
+    .hud-lbl{color:var(--orange);}
+
+    /* ── Explanation ── */
+    #exp-section{padding:0 12px 8px;flex-shrink:0;overflow-y:auto;max-height:120px;}
+    .exp-item{font-size:8.5px;color:var(--dim);padding:3px 0 3px 10px;
+      border-left:2px solid var(--border);margin-bottom:3px;line-height:1.5;}
+    .exp-item.warn{border-color:var(--red);color:#8a6060;}
+    .exp-item.ok{border-color:var(--green);color:#507060;}
+
+    /* ── Metrics (right panel) ── */
+    .metric-row{padding:8px 12px;border-bottom:1px solid var(--border);}
+    .mr-head{display:flex;justify-content:space-between;font-size:8px;
+      color:var(--dim);letter-spacing:.08em;text-transform:uppercase;
+      font-family:'Orbitron',monospace;margin-bottom:4px;}
+    .mr-val{font-size:14px;font-weight:700;font-family:'Orbitron',monospace;
+      transition:all .5s ease;}
+    .mr-bar-track{height:3px;background:var(--border);border-radius:2px;
+      margin-top:4px;overflow:hidden;}
+    .mr-bar{height:100%;border-radius:2px;width:0%;transition:width 1s ease;}
+
+    /* ── Flash alert ── */
+    #flash{position:fixed;top:56px;right:16px;padding:10px 18px;
+      border-radius:4px;font-family:'Orbitron',monospace;font-size:10px;
+      letter-spacing:.12em;transform:translateX(200%);transition:transform .3s ease;
+      z-index:999;border:1px solid;}
+    #flash.show{transform:translateX(0);}
+    #flash.fa-g{background:rgba(0,255,136,.08);border-color:var(--green);
+      color:var(--green);box-shadow:0 0 20px rgba(0,255,136,.18);}
+    #flash.fa-r{background:rgba(255,0,50,.08);border-color:var(--red);
+      color:var(--red);box-shadow:0 0 22px rgba(255,0,50,.2);}
+  </style>
+</head>
+<body class="h-full select-none">
+
+<!-- ══ HEADER ══════════════════════════════════════════════════════════════════ -->
+<header id="hdr">
+  <div class="flex items-center gap-3">
+    <div class="logo-gem"></div>
+    <div>
+      <div class="logo">PROJECT GROUNDTRUTH</div>
+      <div class="logo-sub">IMAGE FORENSICS SUITE // v5.0.0-python</div>
+    </div>
+  </div>
+  <div class="flex items-center gap-5" style="font-size:8.5px;color:var(--dim);font-family:'Share Tech Mono',monospace;">
+    <div class="flex items-center gap-2"><span class="led led-off" id="engine-led"></span><span id="engine-status">ENGINE STANDBY</span></div>
+    <div class="flex items-center gap-2"><span class="led led-on"></span><span>FLASK READY</span></div>
+    <div class="flex items-center gap-2"><span class="led led-on"></span><span>NUMPY / SCIPY</span></div>
+    <div style="width:1px;height:18px;background:var(--border);"></div>
+    <div id="sys-clock" style="color:var(--acc);font-size:10px;letter-spacing:.1em;">00:00:00</div>
+    <div style="border:1px solid var(--orange);padding:2px 7px;font-family:'Orbitron',monospace;font-size:7.5px;letter-spacing:.14em;color:var(--orange);">UNCLASSIFIED</div>
+  </div>
+</header>
+
+<!-- ══ MAIN LAYOUT ═════════════════════════════════════════════════════════════ -->
+<div id="layout">
+
+  <!-- ════════════════════════════════ LEFT PANEL ═ -->
+  <aside class="panel">
+    <div style="flex:1; overflow-y:auto; display:flex; flex-direction:column; min-height:0;">
+
+      <!-- Upload -->
+      <div class="sec-hdr"><span class="dot dot-o"></span>INPUT // SENSOR FEED</div>
+    <div id="dropzone" onclick="document.getElementById('file-input').click()">
+      <div class="corner tl"></div><div class="corner tr"></div>
+      <div class="corner bl"></div><div class="corner br"></div>
+      <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp"/>
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none"
+        stroke="var(--orange)" stroke-width="1.5" stroke-linecap="round"
+        stroke-linejoin="round" style="margin:0 auto 8px;">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <div style="font-family:'Orbitron',monospace;font-size:8.5px;color:var(--acc);letter-spacing:.12em;margin-bottom:3px;">DROP IMAGE / CLICK TO LOAD</div>
+      <div style="font-size:7.5px;color:var(--dim);letter-spacing:.05em;">PNG · JPEG · WEBP — MAX 20 MB</div>
+    </div>
+
+    <!-- File info -->
+    <div id="file-info">
+      <div style="font-size:7.5px;color:var(--dim);margin-bottom:3px;letter-spacing:.08em;">LOADED FILE</div>
+      <div id="fi-name" style="font-size:9.5px;color:var(--acc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">—</div>
+      <div id="fi-meta" style="font-size:7.5px;color:var(--dim);margin-top:2px;">—</div>
+    </div>
+
+    <!-- API config -->
+    <div class="sec-hdr"><span class="dot dot-d"></span>API ENDPOINT</div>
+    <div id="api-section">
+      <input id="api-input" type="text"
+        value="http://localhost:5000"
+        placeholder="https://your-app.railway.app"/>
+      <div style="font-size:7.5px;color:var(--dim);margin-top:4px;letter-spacing:.05em;">
+        Local dev: localhost:5000 · Production: your Railway URL
+      </div>
+    </div>
+
+    <!-- Run -->
+    <div style="padding:0 12px 8px;flex-shrink:0;">
+      <button id="run-btn" onclick="runAnalysis()" disabled>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        INITIATE FORENSIC SCAN
+      </button>
+    </div>
+
+    <!-- Progress -->
+    <div id="progress-section" style="display:none;">
+      <div class="sec-hdr" style="margin:0 0 6px;padding:0;background:none;border:none;">
+        <span class="dot dot-g"></span><span>SCAN PROGRESS</span>
+        <span id="progress-pct" style="margin-left:auto;color:var(--green);">0%</span>
+      </div>
+      <div id="progress-track"><div id="progress-fill"></div></div>
+      <div id="progress-label">Initialising pipeline...</div>
+    </div>
+
+    <!-- GTI gauge -->
+    <div class="sec-hdr" style="margin-top:4px;">
+      <span class="dot dot-g" id="gti-dot"></span><span>GROUND TRUTH INDEX</span>
+    </div>
+    <div id="gti-section">
+      <div class="gti-wrap">
+        <div style="position:relative;flex-shrink:0;">
+          <canvas id="gti-canvas-el" width="104" height="104"></canvas>
+          <div class="gti-center">
+            <div class="gti-pct" id="gti-pct">--</div>
+            <div class="gti-lbl">GTI</div>
+          </div>
+        </div>
+        <div class="gti-stats" style="max-height:160px; overflow-y:auto; padding-right:4px;">
+          <div class="gs-row"><span>DWT (WAVELET)</span><span class="gs-val" id="gs-dwt">—</span></div>
+          <div class="gs-row"><span>DCT (BLOCKS)</span><span class="gs-val" id="gs-dct">—</span></div>
+          <div class="gs-row"><span>FFT (STRIDE)</span><span class="gs-val" id="gs-fft">—</span></div>
+          <div class="gs-row"><span>PRNU (SENSOR)</span><span class="gs-val" id="gs-prnu">—</span></div>
+          <div class="gs-row"><span>SRM (TEXTURE)</span><span class="gs-val" id="gs-srm">—</span></div>
+          <div class="gs-row"><span>COLOR PHYSICS</span><span class="gs-val" id="gs-color">—</span></div>
+          <div class="gs-row"><span>ELA (COMPRESS)</span><span class="gs-val" id="gs-ela">—</span></div>
+          <div class="gs-row"><span>LAP (EDGE VAR)</span><span class="gs-val" id="gs-lap">—</span></div>
+          <div class="gs-row"><span>EXIF METADATA</span><span class="gs-val" id="gs-metadata">—</span></div>
+          <div class="gs-row" style="border:none; margin-top:4px; padding-top:4px; border-top:1px dashed var(--border);"><span>SCAN TIME</span><span class="gs-val" id="gs-time">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Verdict -->
+    <div id="verdict-wrap">
+      <div id="verdict-badge">
+        <div id="verdict-icon">◈</div>
+        <div id="verdict-text" style="font-size:9.5px;letter-spacing:.16em;">AWAITING ANALYSIS</div>
+        <div id="verdict-sub">Load an image to begin forensic scan</div>
+      </div>
+    </div>
+
+    <!-- Explanation -->
+    <div id="exp-section"></div>
+
+    <!-- Score cards -->
+    <div class="sec-hdr"><span class="dot dot-d"></span>COMPONENT SCORES</div>
+    <div id="scores-section" style="display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:0 12px 10px;">
+      <div class="score-card">
+        <div class="sc-label">DWT</div>
+        <div class="sc-val" id="sc-dwt" style="color:var(--orange);">—</div>
+        <div class="sc-bar-track"><div class="sc-bar o" id="scb-dwt"></div></div>
+      </div>
+      <div class="score-card">
+        <div class="sc-label">DCT</div>
+        <div class="sc-val" id="sc-dct" style="color:var(--blue);">—</div>
+        <div class="sc-bar-track"><div class="sc-bar b" id="scb-dct"></div></div>
+      </div>
+      <div class="score-card">
+        <div class="sc-label">FFT</div>
+        <div class="sc-val" id="sc-fft" style="color:var(--orange);">—</div>
+        <div class="sc-bar-track"><div class="sc-bar o" id="scb-fft"></div></div>
+      </div>
+      <div class="score-card">
+        <div class="sc-label">PRNU</div>
+        <div class="sc-val" id="sc-prnu" style="color:var(--green);">—</div>
+        <div class="sc-bar-track"><div class="sc-bar g" id="scb-prnu"></div></div>
+      </div>
+      <div class="score-card">
+        <div class="sc-label">SRM</div>
+        <div class="sc-val" id="sc-srm" style="color:var(--green);">—</div>
+        <div class="sc-bar-track"><div class="sc-bar g" id="scb-srm"></div></div>
+      </div>
+      <div class="score-card">
+        <div class="sc-label">COLOR</div>
+        <div class="sc-val" id="sc-color" style="color:var(--acc);">—</div>
+        <div class="sc-bar-track"><div class="sc-bar b" id="scb-color"></div></div>
+      </div>
+      <div class="score-card">
+        <div class="sc-label">ELA</div>
+        <div class="sc-val" id="sc-ela" style="color:var(--blue);">—</div>
+        <div class="sc-bar-track"><div class="sc-bar b" id="scb-ela"></div></div>
+      </div>
+      <div class="score-card">
+        <div class="sc-label">LAPLACIAN</div>
+        <div class="sc-val" id="sc-lap" style="color:var(--red);">—</div>
+        <div class="sc-bar-track"><div class="sc-bar r" id="scb-lap"></div></div>
+      </div>
+      <div class="score-card" style="grid-column:span 2;">
+        <div class="sc-label">METADATA</div>
+        <div class="sc-val" id="sc-metadata" style="color:var(--acc);">—</div>
+        <div class="sc-bar-track"><div class="sc-bar b" id="scb-metadata"></div></div>
+      </div>
+    </div>
+
+    </div> <!-- End left panel scrollable wrap -->
+  </aside>
+
+  <!-- ════════════════════════════ CENTRE PANEL ═ -->
+  <main id="centre">
+
+    <!-- Tab bar -->
+    <div id="tab-bar">
+      <button class="tab-btn active" data-tab="original"  onclick="switchTab('original')">ORIGINAL</button>
+      <button class="tab-btn"        data-tab="dwt"       onclick="switchTab('dwt')">DWT SUBBANDS</button>
+      <button class="tab-btn"        data-tab="dct"       onclick="switchTab('dct')">DCT VARIANCE</button>
+      <button class="tab-btn"        data-tab="texture"   onclick="switchTab('texture')">MICRO-TEXTURE</button>
+      <button class="tab-btn"        data-tab="color"     onclick="switchTab('color')">COLOR CORRELATION</button>
+      <button class="tab-btn"        data-tab="ela"       onclick="switchTab('ela')">ELA MAP</button>
+      <button class="tab-btn"        data-tab="fft"       onclick="switchTab('fft')">FFT SPECTRUM</button>
+      <button class="tab-btn"        data-tab="prnu"      onclick="switchTab('prnu')">PRNU NOISE</button>
+      <button class="tab-btn"        data-tab="anomaly"   onclick="switchTab('anomaly')">MULTIZONE MASK</button>
+      <div id="tab-meta">
+        <span id="tab-dim" style="color:var(--dim);">NO IMAGE</span>
+        <div style="width:1px;height:14px;background:var(--border);"></div>
+        <span>SCAN</span>
+        <div id="scan-track"><div id="scan-fill"></div></div>
+        <span id="scan-pct" style="min-width:28px;">0%</span>
+      </div>
+    </div>
+
+    <!-- Canvas area -->
+    <div id="canvas-area">
+
+      <!-- Empty state -->
+      <div id="empty-state">
+        <div class="es-icon">
+          <div class="es-scan"></div>
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none"
+            stroke="var(--orange)" stroke-width="1" stroke-linecap="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+        </div>
+        <div id="es-title">NO IMAGE LOADED</div>
+        <div id="es-sub">Drop an image into the left panel<br/>then initiate the forensic scan<br/>to run the Python analysis pipeline</div>
+      </div>
+
+      <!-- Image display -->
+      <div id="img-container">
+        <img id="display-img" src="" alt="Forensic view"/>
+        <!-- Scan overlay -->
+        <div id="scan-overlay">
+          <div id="scan-line" style="top:0;"></div>
+          <div id="scan-glow" style="top:3px;"></div>
+        </div>
+      </div>
+
+      <!-- Pixel HUD -->
+      <div id="pixel-hud">
+        <div class="hud-item flex gap-1"><span class="hud-lbl">W:</span><span id="hud-w">—</span></div>
+        <div class="hud-item flex gap-1"><span class="hud-lbl">H:</span><span id="hud-h">—</span></div>
+        <div class="hud-item flex gap-1"><span class="hud-lbl">DIM:</span><span id="hud-dim">—</span></div>
+        <div class="hud-item flex gap-1"><span class="hud-lbl">CONF:</span><span id="hud-conf">—</span></div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ════════════════════════════ RIGHT PANEL ═ -->
+  <aside class="panel" id="right-col">
+
+    <div class="sec-hdr"><span class="dot dot-d"></span>TELEMETRY METRICS</div>
+    <div style="flex:0 1 auto; overflow-y:auto; max-height:380px; border-bottom:1px solid var(--border);">
+      <div class="metric-row">
+        <div class="mr-head"><span>PIXEL VARIANCE</span><span class="mr-val" id="m-pv" style="color:var(--green);">—</span></div>
+        <div class="mr-bar-track"><div class="mr-bar" id="mb-pv" style="background:var(--green);box-shadow:0 0 5px var(--green);"></div></div>
+      </div>
+      <div class="metric-row">
+        <div class="mr-head"><span>EDGE DIVERGENCE</span><span class="mr-val" id="m-ed" style="color:var(--orange);">—</span></div>
+        <div class="mr-bar-track"><div class="mr-bar" id="mb-ed" style="background:var(--orange);box-shadow:0 0 5px var(--orange);"></div></div>
+      </div>
+      <div class="metric-row">
+        <div class="mr-head"><span>GRID COHERENCE</span><span class="mr-val" id="m-gc" style="color:var(--blue);">—</span></div>
+        <div class="mr-bar-track"><div class="mr-bar" id="mb-gc" style="background:var(--blue);box-shadow:0 0 5px var(--blue);"></div></div>
+      </div>
+      <div class="metric-row">
+        <div class="mr-head"><span>ANOMALY DENSITY</span><span class="mr-val" id="m-ad" style="color:var(--red);">—</span></div>
+        <div class="mr-bar-track"><div class="mr-bar" id="mb-ad" style="background:var(--red);box-shadow:0 0 5px var(--red);"></div></div>
+      </div>
+      <div class="metric-row">
+        <div class="mr-head"><span>NOISE POWER (RMS)</span><span class="mr-val" id="m-np" style="color:var(--acc);">—</span></div>
+        <div class="mr-bar-track"><div class="mr-bar" id="mb-np" style="background:var(--acc);"></div></div>
+      </div>
+      <div class="metric-row">
+        <div class="mr-head"><span>FFT PEAK COUNT</span><span class="mr-val" id="m-fpc" style="color:var(--orange);">—</span></div>
+        <div class="mr-bar-track"><div class="mr-bar" id="mb-fpc" style="background:var(--orange);box-shadow:0 0 5px var(--orange);"></div></div>
+      </div>
+      <div class="metric-row">
+        <div class="mr-head"><span>ELA UNIFORMITY</span><span class="mr-val" id="m-eu" style="color:var(--blue);">—</span></div>
+        <div class="mr-bar-track"><div class="mr-bar" id="mb-eu" style="background:var(--blue);box-shadow:0 0 5px var(--blue);"></div></div>
+      </div>
+      <div class="metric-row">
+        <div class="mr-head"><span>ANOMALY RATIO</span><span class="mr-val" id="m-ar" style="color:var(--red);">—</span></div>
+        <div class="mr-bar-track"><div class="mr-bar" id="mb-ar" style="background:var(--red);box-shadow:0 0 5px var(--red);"></div></div>
+      </div>
+      <div class="metric-row">
+        <div class="mr-head"><span>DWT DIAG RATIO</span><span class="mr-val" id="m-dwt" style="color:var(--orange);">—</span></div>
+        <div class="mr-bar-track"><div class="mr-bar" id="mb-dwt" style="background:var(--orange);box-shadow:0 0 5px var(--orange);"></div></div>
+      </div>
+      <div class="metric-row">
+        <div class="mr-head"><span>DCT BENFORD DEV</span><span class="mr-val" id="m-dct" style="color:var(--blue);">—</span></div>
+        <div class="mr-bar-track"><div class="mr-bar" id="mb-dct" style="background:var(--blue);box-shadow:0 0 5px var(--blue);"></div></div>
+      </div>
+      <div class="metric-row">
+        <div class="mr-head"><span>LBP TEXTURE ENT</span><span class="mr-val" id="m-lbp" style="color:var(--green);">—</span></div>
+        <div class="mr-bar-track"><div class="mr-bar" id="mb-lbp" style="background:var(--green);box-shadow:0 0 5px var(--green);"></div></div>
+      </div>
+      <div class="metric-row" style="border:none;">
+        <div class="mr-head"><span>CHROMA LAB ENT</span><span class="mr-val" id="m-chroma" style="color:var(--acc);">—</span></div>
+        <div class="mr-bar-track"><div class="mr-bar" id="mb-chroma" style="background:var(--acc);"></div></div>
+      </div>
+    </div>
+
+    <!-- Terminal -->
+    <div id="terminal-section">
+      <div class="sec-hdr">
+        <span class="dot dot-g"></span><span>DIAGNOSTIC CONSOLE</span>
+        <button onclick="clearTerm()" style="margin-left:auto;background:none;border:none;
+          color:var(--dim);font-size:8px;cursor:pointer;font-family:'Share Tech Mono',monospace;">CLR</button>
+        <button onclick="copyRawJSON()" id="copy-json-btn" style="margin-left:8px;background:none;border:none;
+          color:var(--dim);font-size:8px;cursor:pointer;font-family:'Share Tech Mono',monospace;display:none;">COPY JSON</button>
+      </div>
+      <div id="terminal">
+        <!-- Boot logs injected by JS -->
+      </div>
+    </div>
+
+  </aside>
+</div>
+
+<!-- Flash alert -->
+<div id="flash"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+//  PROJECT GROUNDTRUTH — Frontend Engine
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── State ──────────────────────────────────────────────────────────────────
+const S = {
+  file: null,
+  loaded: false,
+  scanning: false,
+  results: null,
+  currentTab: 'original',
+  images: {},
+};
+
+// Tab → image key mapping
+const TAB_IMAGE_KEY = {
+  original: 'original',
+  dwt:      'dwt_map',
+  dct:      'dct_map',
+  texture:  'texture_map',
+  color:    'color_map',
+  ela:      'ela_map',
+  fft:      'fft_spectrum',
+  prnu:     'prnu_map',
+  anomaly:  'anomaly_mask',
+};
+
+// ── DOM refs ───────────────────────────────────────────────────────────────
+const gtiCtx     = document.getElementById('gti-canvas-el').getContext('2d');
+const terminal   = document.getElementById('terminal');
+const displayImg = document.getElementById('display-img');
+const imgContainer = document.getElementById('img-container');
+const emptyState = document.getElementById('empty-state');
+const pixelHud   = document.getElementById('pixel-hud');
+const scanOverlay = document.getElementById('scan-overlay');
+const scanLine   = document.getElementById('scan-line');
+const scanGlow   = document.getElementById('scan-glow');
+
+// ── Clock ──────────────────────────────────────────────────────────────────
+function tick() {
+  const n = new Date();
+  document.getElementById('sys-clock').textContent =
+    [n.getHours(), n.getMinutes(), n.getSeconds()]
+      .map(v => String(v).padStart(2, '0')).join(':');
+}
+setInterval(tick, 1000); tick();
+
+// ── Boot terminal ──────────────────────────────────────────────────────────
+const BOOT_LOGS = [
+  ['SYS',  'GroundTruth Forensics Suite v5.0.0 initialised.'],
+  ['SYS',  'Frontend engine online. Awaiting API connection.'],
+  ['OK',   'Canvas API — nominal.'],
+  ['OK',   'Fetch API — nominal.'],
+  ['SYS',  'DWT engine: 3-level db4 sub-band analyzer — armed.'],
+  ['SYS',  'DCT engine: vectorized 8x8 block coefficient compiler — armed.'],
+  ['SYS',  'SRM & LBP engine: 10-kernel noise filter + LBP texture encoder — armed.'],
+  ['SYS',  'Color Physics: Pearson correlation + Lab chroma entropy — armed.'],
+  ['SYS',  'Metadata: EXIF analyzer with AI signature gate — armed.'],
+  ['SYS',  'Verdict engine: weighted GTI + dynamic weight redistributor — armed.'],
+  ['OK',   'All systems nominal. Drop an image to begin.'],
+];
+
+let bootIdx = 0;
+function bootLog() {
+  if (bootIdx < BOOT_LOGS.length) {
+    const [t, m] = BOOT_LOGS[bootIdx++];
+    appendLog(t, m);
+    setTimeout(bootLog, 120);
+  }
+}
+setTimeout(bootLog, 300);
+
+// ── Terminal logger ────────────────────────────────────────────────────────
+const TAG_CLASS = {SYS:'t-sys', MATH:'t-math', OK:'t-ok', WARN:'t-warn', ERR:'t-err'};
+
+function appendLog(tag, msg) {
+  const n  = new Date();
+  const ts = [n.getHours(), n.getMinutes(), n.getSeconds()]
+    .map(v => String(v).padStart(2,'0')).join(':');
+  const cls = TAG_CLASS[tag] || 't-sys';
+
+  // Remove old cursor line
+  const old = terminal.querySelector('.cursor-line');
+  if (old) old.remove();
+
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML =
+    `<span class="l-ts">${ts}</span>` +
+    `<span class="l-tag ${cls}">[${tag}]</span>` +
+    `<span class="l-msg">${msg}</span>`;
+  terminal.appendChild(line);
+
+  // Re-add cursor
+  const cur = document.createElement('div');
+  cur.className = 'log-line cursor-line';
+  cur.innerHTML = `<span class="l-ts">—</span><span class="l-tag">›</span><span id="tc"></span>`;
+  terminal.appendChild(cur);
+
+  terminal.scrollTop = terminal.scrollHeight;
+}
+
+function clearTerm() {
+  terminal.innerHTML = '';
+  const cur = document.createElement('div');
+  cur.className = 'log-line cursor-line';
+  cur.innerHTML = `<span class="l-ts">—</span><span class="l-tag">›</span><span id="tc"></span>`;
+  terminal.appendChild(cur);
+}
+
+// ── GTI gauge ──────────────────────────────────────────────────────────────
+function drawGTI(value, color = '#00FF88') {
+  const cx = 52, cy = 52, r = 40;
+  const start = Math.PI * 0.75;
+  const end   = Math.PI * 2.25;
+  const pct   = Math.min(value, 100) / 100;
+
+  gtiCtx.clearRect(0, 0, 104, 104);
+
+  // Track
+  gtiCtx.beginPath();
+  gtiCtx.arc(cx, cy, r, start, end);
+  gtiCtx.strokeStyle = '#1e2530';
+  gtiCtx.lineWidth = 7;
+  gtiCtx.lineCap = 'round';
+  gtiCtx.stroke();
+
+  // Tick marks
+  for (let i = 0; i <= 10; i++) {
+    const a = start + (end - start) * i / 10;
+    const c = Math.cos(a), s = Math.sin(a);
+    gtiCtx.beginPath();
+    gtiCtx.moveTo(cx + c * (r - 13), cy + s * (r - 13));
+    gtiCtx.lineTo(cx + c * (r - 9),  cy + s * (r - 9));
+    gtiCtx.strokeStyle = '#252f3a';
+    gtiCtx.lineWidth = 1;
+    gtiCtx.stroke();
+  }
+
+  if (pct > 0) {
+    // Fill
+    gtiCtx.beginPath();
+    gtiCtx.arc(cx, cy, r, start, start + (end - start) * pct);
+    gtiCtx.strokeStyle = color;
+    gtiCtx.lineWidth = 7;
+    gtiCtx.lineCap = 'round';
+    gtiCtx.shadowColor = color;
+    gtiCtx.shadowBlur = 10;
+    gtiCtx.stroke();
+    gtiCtx.shadowBlur = 0;
+  }
+
+  // Inner ring
+  gtiCtx.beginPath();
+  gtiCtx.arc(cx, cy, r - 14, 0, Math.PI * 2);
+  gtiCtx.strokeStyle = '#1a2028';
+  gtiCtx.lineWidth = 1;
+  gtiCtx.stroke();
+}
+drawGTI(0);
+updateTabVisibility(null);
+
+// ── Drag & drop ────────────────────────────────────────────────────────────
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('file-input');
+
+dropzone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropzone.classList.add('drag-over');
+});
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('image/')) setFile(f);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) setFile(e.target.files[0]);
+});
+
+function setFile(file) {
+  S.file = file;
+  S.loaded = true;
+  S.results = null;
+  S.images = {};
+  document.getElementById('copy-json-btn').style.display = 'none';
+  updateTabVisibility(null);
+  switchTab('original');
+
+  // File info
+  document.getElementById('file-info').style.display = 'block';
+  document.getElementById('fi-name').textContent = file.name;
+  document.getElementById('fi-meta').textContent =
+    `${(file.size / 1024).toFixed(1)} KB · ${file.type}`;
+
+  // Preview in ORIGINAL tab
+  const url = URL.createObjectURL(file);
+  S.images['original'] = url;
+
+  const img = new Image();
+  img.onload = () => {
+    document.getElementById('hud-w').textContent  = img.naturalWidth;
+    document.getElementById('hud-h').textContent  = img.naturalHeight;
+    document.getElementById('hud-dim').textContent = `${img.naturalWidth}×${img.naturalHeight}`;
+    document.getElementById('tab-dim').textContent = `${img.naturalWidth}×${img.naturalHeight}`;
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+
+  // Show image
+  showImage(URL.createObjectURL(file));
+  emptyState.style.display = 'none';
+  imgContainer.style.display = 'block';
+  pixelHud.classList.add('show');
+
+  // Enable run
+  document.getElementById('run-btn').disabled = false;
+  setEngineLED('standby');
+  appendLog('SYS', `File loaded: ${file.name} (${(file.size/1024).toFixed(1)} KB)`);
+  appendLog('SYS', 'Ready. Click INITIATE FORENSIC SCAN to begin.');
+}
+
+function showImage(src) {
+  displayImg.src = src;
+  displayImg.style.display = 'block';
+}
+
+// ── Tab visibility logic ───────────────────────────────────────────────────
+function updateTabVisibility(data) {
+  // Always show original and anomaly (MULTIZONE MASK)
+  const tabsToShow = new Set(['original', 'anomaly']);
+  
+  if (data && data.metrics) {
+    const m = data.metrics;
+    
+    // Check DWT score
+    if (m.dwt_score !== undefined && m.dwt_score < 92.0) tabsToShow.add('dwt');
+    // Check DCT score
+    if (m.dct_score !== undefined && m.dct_score < 92.0) tabsToShow.add('dct');
+    // Check SRM (Texture) score
+    if (m.srm_score !== undefined && m.srm_score < 92.0) tabsToShow.add('texture');
+    // Check Color Correlation score
+    if (m.color_score !== undefined && m.color_score < 92.0) tabsToShow.add('color');
+    // Check ELA score
+    if (m.ela_score !== undefined && m.ela_score < 92.0) tabsToShow.add('ela');
+    // Check FFT score
+    if (m.fft_score !== undefined && m.fft_score < 92.0) tabsToShow.add('fft');
+    // Check PRNU score
+    if (m.prnu_score !== undefined && m.prnu_score < 92.0) tabsToShow.add('prnu');
+  }
+
+  // Update DOM visibility of tab buttons
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    const tab = btn.dataset.tab;
+    if (tabsToShow.has(tab)) {
+      btn.style.display = 'inline-block';
+    } else {
+      btn.style.display = 'none';
+    }
+  });
+}
+
+// ── Tab switching ──────────────────────────────────────────────────────────
+function switchTab(tab) {
+  S.currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+
+  const key = TAB_IMAGE_KEY[tab];
+  const src = S.images[key];
+  if (src) {
+    showImage(src);
+  } else if (tab === 'original' && S.file) {
+    showImage(URL.createObjectURL(S.file));
+  }
+}
+
+// ── Run analysis ───────────────────────────────────────────────────────────
+async function runAnalysis() {
+  if (!S.file || S.scanning) return;
+  S.scanning = true;
+
+  const apiBase = document.getElementById('api-input').value.trim().replace(/\/$/, '');
+  document.getElementById('run-btn').disabled = true;
+  setEngineLED('active');
+
+  // Show progress
+  const progSec = document.getElementById('progress-section');
+  progSec.style.display = 'block';
+  setProgress(0, 'Sending image to Python backend...');
+
+  appendLog('SYS', `Connecting to backend: ${apiBase}/analyze`);
+  appendLog('SYS', 'Packaging image as multipart/form-data...');
+
+  // Build form data
+  const fd = new FormData();
+  fd.append('image', S.file);
+
+  // Fake progress animation during API call
+  let fakePct = 0;
+  const fakeSteps = [
+    [8,  200, 'Receiving image...'],
+    [20, 500, 'Running PRNU Wiener filter extraction...'],
+    [40, 800, 'Computing FFT2 frequency spectrum...'],
+    [60, 600, 'Running ELA Q75 round-trip...'],
+    [78, 500, 'Applying Laplacian convolution...'],
+    [90, 400, 'Computing verdict scores...'],
+    [95, 300, 'Rendering visualisations...'],
+  ];
+
+  async function animateFakeProgress() {
+    for (const [pct, delay, msg] of fakeSteps) {
+      if (!S.scanning) break;
+      await sleep(delay);
+      setProgress(pct, msg);
+    }
+  }
+
+  // Run progress animation and API call concurrently
+  let data;
+  try {
+    const [_, response] = await Promise.all([
+      animateFakeProgress(),
+      fetch(`${apiBase}/analyze`, { method: 'POST', body: fd })
+    ]);
+
+    setProgress(97, 'Parsing response...');
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
+    data = await response.json();
+  } catch (err) {
+    setProgress(0, '');
+    appendLog('ERR', `Request failed: ${err.message}`);
+    appendLog('ERR', 'Check your API URL and ensure the Flask server is running.');
+    setEngineLED('err');
+    S.scanning = false;
+    document.getElementById('run-btn').disabled = false;
+    showFlash(`✕ CONNECTION FAILED`, 'fa-r');
+    return;
+  }
+
+  setProgress(100, 'Analysis complete.');
+
+  // ── Play cinematic scan animation ───────────────────────────────────────
+  appendLog('SYS', 'Analysis complete. Initiating scan reveal animation...');
+  await playScanAnimation();
+
+  // ── Store images ─────────────────────────────────────────────────────────
+  S.images['original']     = data.images.original;
+  S.images['dwt_map']      = data.images.dwt_map;
+  S.images['dct_map']      = data.images.dct_map;
+  S.images['texture_map']  = data.images.texture_map;
+  S.images['color_map']    = data.images.color_map;
+  S.images['ela_map']      = data.images.ela_map;
+  S.images['fft_spectrum'] = data.images.fft_spectrum;
+  S.images['prnu_map']     = data.images.prnu_map;
+  S.images['anomaly_mask'] = data.images.anomaly_mask;
+  S.results = data;
+
+  console.log("GroundTruth API Response JSON:", data);
+  document.getElementById('copy-json-btn').style.display = 'inline-block';
+
+  // ── Replay backend logs ──────────────────────────────────────────────────
+  if (data.logs && data.logs.length) {
+    for (const line of data.logs) {
+      const match = line.match(/^\[(\w+)\]\s*(.*)/);
+      if (match) appendLog(match[1], match[2]);
+      else appendLog('SYS', line);
+      await sleep(30);
+    }
+  }
+
+  // ── Update GTI ────────────────────────────────────────────────────────────
+  const gti = data.gti;
+  const isSynth = data.verdict === 'SYNTHETIC_DETECTED';
+  const gaugeColor = isSynth ? '#FF0032' : '#00FF88';
+
+  drawGTI(gti, gaugeColor);
+  animateNumber('gti-pct', 0, gti, '%', gaugeColor);
+  document.getElementById('gti-dot').style.background   = gaugeColor;
+  document.getElementById('gti-dot').style.boxShadow    = `0 0 6px ${gaugeColor}`;
+
+  const cs = data.component_scores;
+  document.getElementById('gs-dwt').textContent      = cs.dwt !== undefined ? cs.dwt.toFixed(1) : '—';
+  document.getElementById('gs-dct').textContent      = cs.dct !== undefined ? cs.dct.toFixed(1) : '—';
+  document.getElementById('gs-fft').textContent      = cs.fft !== undefined ? cs.fft.toFixed(1) : '—';
+  document.getElementById('gs-prnu').textContent     = cs.prnu !== undefined ? cs.prnu.toFixed(1) : '—';
+  document.getElementById('gs-srm').textContent      = cs.srm !== undefined ? cs.srm.toFixed(1) : '—';
+  document.getElementById('gs-color').textContent    = cs.color !== undefined ? cs.color.toFixed(1) : '—';
+  document.getElementById('gs-ela').textContent      = cs.ela !== undefined ? cs.ela.toFixed(1) : '—';
+  document.getElementById('gs-lap').textContent      = cs.lap !== undefined ? cs.lap.toFixed(1) : '—';
+  document.getElementById('gs-metadata').textContent = data.metrics.metadata_neutral ? 'STRIPPED' : (cs.metadata !== undefined ? cs.metadata.toFixed(1) : '—');
+  document.getElementById('gs-time').textContent = `${data.scan_time_ms} ms`;
+
+  // ── Verdict badge ─────────────────────────────────────────────────────────
+  const badge  = document.getElementById('verdict-badge');
+  const vicon  = document.getElementById('verdict-icon');
+  const vtext  = document.getElementById('verdict-text');
+  const vsub   = document.getElementById('verdict-sub');
+
+  if (isSynth) {
+    badge.className = 'synthetic';
+    vicon.textContent = '⚠';
+    vtext.textContent = 'SYNTHETIC PATTERN DETECTED';
+    vsub.textContent  = `GTI: ${gti}%  ·  Confidence: ${(data.confidence*100).toFixed(0)}%`;
+  } else {
+    badge.className = 'organic';
+    vicon.textContent = '✓';
+    vtext.textContent = 'ORGANIC SENSOR MATCH';
+    vsub.textContent  = `GTI: ${gti}%  ·  Confidence: ${(data.confidence*100).toFixed(0)}%`;
+  }
+
+  // ── Explanation ───────────────────────────────────────────────────────────
+  const expSec = document.getElementById('exp-section');
+  expSec.innerHTML = '';
+  (data.explanation || []).forEach(txt => {
+    const d = document.createElement('div');
+    d.className = `exp-item ${isSynth ? 'warn' : 'ok'}`;
+    d.textContent = txt;
+    expSec.appendChild(d);
+  });
+
+  // ── Score cards ───────────────────────────────────────────────────────────
+  animateScore('sc-dwt',      'scb-dwt',      cs.dwt || 0);
+  animateScore('sc-dct',      'scb-dct',      cs.dct || 0);
+  animateScore('sc-fft',      'scb-fft',      cs.fft || 0);
+  animateScore('sc-prnu',     'scb-prnu',     cs.prnu || 0);
+  animateScore('sc-srm',      'scb-srm',      cs.srm || 0);
+  animateScore('sc-color',    'scb-color',    cs.color || 0);
+  animateScore('sc-ela',      'scb-ela',      cs.ela || 0);
+  animateScore('sc-lap',      'scb-lap',      cs.lap || 0);
+
+  if (data.metrics.metadata_neutral) {
+    document.getElementById('sc-metadata').textContent = 'NEUTRAL';
+    document.getElementById('scb-metadata').style.width = '0%';
+  } else {
+    animateScore('sc-metadata', 'scb-metadata', cs.metadata || 0);
+  }
+
+  // ── Metrics bars ──────────────────────────────────────────────────────────
+  const m = data.metrics;
+  const pvNorm = Math.min(100, m.pixel_variance / 3000 * 100);
+  const edNorm = Math.min(100, m.edge_divergence / 20 * 100);
+  const npNorm = Math.min(100, m.noise_power * 400);
+  const fpcNorm = Math.min(100, m.fft_peak_count / 20 * 100);
+  const euNorm  = Math.min(100, m.ela_uniformity * 100);
+
+  const dwtNorm = Math.min(100, m.hh_ratio_l1 / 0.4 * 100);
+  const dctNorm = Math.min(100, m.benford_dev / 0.15 * 100);
+  const lbpNorm = Math.min(100, m.lbp_entropy / 5.0 * 100);
+  const chromaNorm = Math.min(100, m.chroma_entropy / 5.0 * 100);
+
+  setMetric('m-pv',  'mb-pv',  pvNorm.toFixed(1)+'%', pvNorm);
+  setMetric('m-ed',  'mb-ed',  m.edge_divergence.toFixed(2), edNorm);
+  setMetric('m-gc',  'mb-gc',  m.grid_coherence.toFixed(1)+'%', m.grid_coherence);
+  setMetric('m-ad',  'mb-ad',  m.anomaly_density.toFixed(1)+'%', m.anomaly_density);
+  setMetric('m-np',  'mb-np',  m.noise_power.toFixed(4), npNorm);
+  setMetric('m-fpc', 'mb-fpc', m.fft_peak_count, fpcNorm);
+  setMetric('m-eu',  'mb-eu',  m.ela_uniformity.toFixed(4), euNorm);
+  setMetric('m-ar',  'mb-ar',  m.anomaly_ratio.toFixed(2)+'%', Math.min(100, m.anomaly_ratio * 10));
+
+  setMetric('m-dwt', 'mb-dwt', m.hh_ratio_l1.toFixed(4), dwtNorm);
+  setMetric('m-dct', 'mb-dct', m.benford_dev.toFixed(5), dctNorm);
+  setMetric('m-lbp', 'mb-lbp', m.lbp_entropy.toFixed(3), lbpNorm);
+  setMetric('m-chroma', 'mb-chroma', m.chroma_entropy.toFixed(3), chromaNorm);
+
+  // HUD
+  document.getElementById('hud-dim').textContent  = `${data.dims[0]}×${data.dims[1]}`;
+  document.getElementById('hud-conf').textContent = `${(data.confidence*100).toFixed(0)}%`;
+
+  // ── Update tab visibility and switch to MULTIZONE MASK ─────────────────────
+  updateTabVisibility(data);
+  switchTab('anomaly');
+
+  setEngineLED('done');
+  showFlash(isSynth ? '⚠ SYNTHETIC PATTERN DETECTED' : '✓ ORGANIC SENSOR MATCH',
+    isSynth ? 'fa-r' : 'fa-g');
+
+  S.scanning = false;
+  document.getElementById('run-btn').disabled = false;
+  document.getElementById('run-btn').innerHTML = `
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.1"/>
+    </svg> RE-SCAN`;
+}
+
+// ── Cinematic scan animation ───────────────────────────────────────────────
+async function playScanAnimation() {
+  return new Promise(resolve => {
+    const rect   = displayImg.getBoundingClientRect();
+    const height = displayImg.offsetHeight || 400;
+
+    scanOverlay.style.display = 'block';
+    scanLine.style.top  = '0px';
+    scanGlow.style.top  = '3px';
+
+    const duration = 1800;
+    const start    = performance.now();
+
+    function frame(now) {
+      const pct    = Math.min((now - start) / duration, 1);
+      const y      = Math.round(pct * height);
+      scanLine.style.top = y + 'px';
+      scanGlow.style.top = (y + 3) + 'px';
+
+      // Update scan bar in header
+      const sp = Math.round(pct * 100);
+      document.getElementById('scan-fill').style.width = sp + '%';
+      document.getElementById('scan-pct').textContent  = sp + '%';
+
+      if (pct < 1) {
+        requestAnimationFrame(frame);
+      } else {
+        setTimeout(() => {
+          scanOverlay.style.display = 'none';
+          resolve();
+        }, 200);
+      }
+    }
+    requestAnimationFrame(frame);
+  });
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function setProgress(pct, label) {
+  document.getElementById('progress-fill').style.width  = pct + '%';
+  document.getElementById('progress-pct').textContent   = pct + '%';
+  if (label) document.getElementById('progress-label').textContent = label;
+  document.getElementById('scan-fill').style.width = pct + '%';
+  document.getElementById('scan-pct').textContent  = pct + '%';
+}
+
+function setMetric(valId, barId, val, pct) {
+  document.getElementById(valId).textContent        = val;
+  document.getElementById(barId).style.width        = Math.min(100, pct) + '%';
+}
+
+function animateScore(valId, barId, target) {
+  const el = document.getElementById(valId);
+  const bar = document.getElementById(barId);
+  bar.style.width = target.toFixed(1) + '%';
+  let cur = 0;
+  const step = target / 40;
+  const t = setInterval(() => {
+    cur = Math.min(cur + step, target);
+    el.textContent = cur.toFixed(1);
+    if (cur >= target) clearInterval(t);
+  }, 22);
+}
+
+function animateNumber(id, from, to, suffix, color) {
+  const el = document.getElementById(id);
+  if (color) { el.style.color = color; el.style.textShadow = `0 0 14px ${color}88`; }
+  let cur = from;
+  const step = (to - from) / 50;
+  const t = setInterval(() => {
+    cur = Math.min(cur + step, to);
+    el.textContent = Math.round(cur) + (suffix || '');
+    if (cur >= to) clearInterval(t);
+  }, 20);
+}
+
+function setEngineLED(mode) {
+  const led = document.getElementById('engine-led');
+  const lbl = document.getElementById('engine-status');
+  led.className = 'led';
+  if (mode === 'active') {
+    led.classList.add('led-warn');
+    lbl.textContent = 'ENGINE ACTIVE';
+    lbl.style.color = '#ffcc00';
+  } else if (mode === 'done') {
+    led.classList.add('led-on');
+    lbl.textContent = 'SCAN COMPLETE';
+    lbl.style.color = 'var(--green)';
+  } else if (mode === 'err') {
+    led.classList.add('led-err');
+    lbl.textContent = 'CONNECTION ERROR';
+    lbl.style.color = 'var(--red)';
+  } else if (mode === 'standby') {
+    led.classList.add('led-on');
+    lbl.textContent = 'IMAGE LOADED';
+    lbl.style.color = 'var(--green)';
+  } else {
+    led.classList.add('led-off');
+    lbl.textContent = 'ENGINE STANDBY';
+    lbl.style.color = '';
+  }
+}
+
+function showFlash(msg, cls) {
+  const el = document.getElementById('flash');
+  el.textContent = msg;
+  el.className   = cls + ' show';
+  setTimeout(() => el.classList.remove('show'), 4500);
+}
+
+function copyRawJSON() {
+  if (!S.results) return;
+  // Clone results to avoid mutating the live state
+  const cleanResults = JSON.parse(JSON.stringify(S.results));
+  if (cleanResults.images) {
+    for (const key in cleanResults.images) {
+      const val = cleanResults.images[key];
+      if (typeof val === 'string' && val.startsWith('data:image/')) {
+        cleanResults.images[key] = val.substring(0, 30) + '... [truncated]';
+      }
+    }
+  }
+  const jsonStr = JSON.stringify(cleanResults, null, 2);
+  navigator.clipboard.writeText(jsonStr).then(() => {
+    showFlash("✓ RAW JSON COPIED TO CLIPBOARD", "fa-g");
+  }).catch(err => {
+    appendLog("ERR", "Failed to copy JSON: " + err);
+  });
+}
+</script>
+</body>
+</html>
