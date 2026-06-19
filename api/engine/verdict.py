@@ -108,22 +108,28 @@ def compute_verdict(
                 dct_val >= 80.0 and
                 srm_val >= 60.0):
                 
-                other_scores = [v for k, v in active_modules.items() if k != "fft"]
-                if other_scores:
-                    other_avg = sum(other_scores) / len(other_scores)
-                    if other_avg > 70.0:
-                        # Grant exemption if:
-                        # 1) It has upscaling signatures (lap < 55 or prnu < 70)
-                        # OR 2) All other physical sensors are highly organic/clean (other_avg > 80.0)
-                        lap_val = active_modules.get("lap", 100.0)
-                        prnu_val = active_modules.get("prnu", 100.0)
-                        if lap_val < 55.0 or prnu_val < 70.0 or other_avg > 80.0:
-                            high_disagreement = True
-                            disagreement_msg = (
-                                "High disagreement: FFT indicates synthetic periodic patterns, "
-                                "but all other physical sensors confirm organic capture (indicative "
-                                "of real upscaling/re-sampling or natural texture)."
-                            )
+                 other_scores = [v for k, v in active_modules.items() if k != "fft"]
+                 if other_scores:
+                     other_avg = sum(other_scores) / len(other_scores)
+                     if other_avg > 70.0:
+                         lap_val = active_modules.get("lap", 100.0)
+                         prnu_val = active_modules.get("prnu", 100.0)
+                         fft_threshold_pass = True
+                         if fft_score < 10.0:
+                             peak_count = fft_result.get("peak_count", 0)
+                             if peak_count <= 45:
+                                 if prnu_val < 78.0 or lap_val < 75.0:
+                                     fft_threshold_pass = False
+                             else:
+                                 if prnu_val < 55.0 or lap_val < 35.0:
+                                     fft_threshold_pass = False
+                         if fft_threshold_pass and (lap_val < 55.0 or prnu_val < 70.0 or other_avg > 80.0):
+                             high_disagreement = True
+                             disagreement_msg = (
+                                 "High disagreement: FFT indicates synthetic periodic patterns, "
+                                 "but all other physical sensors confirm organic capture (indicative "
+                                 "of real upscaling/re-sampling or natural texture)."
+                             )
 
         # Calculate base global penalty
         low_score_deviations = sum(40.0 - val for val in active_modules.values() if val < 40.0)
@@ -161,10 +167,10 @@ def compute_verdict(
             w, h = dims
             min_dim = min(w, h)
             if min_dim < 512:
-                low_res_multiplier = 512.0 / min_dim
+                low_res_multiplier = min(2.0, 512.0 / min_dim)
                 for m in ["prnu", "dwt", "dct", "ela"]:
                     if m in active_modules and active_modules[m] < 92.0:
-                        gti -= (92.0 - active_modules[m]) * 0.45 * low_res_multiplier
+                        gti -= (92.0 - active_modules[m]) * 0.10 * low_res_multiplier
 
         gti = round(min(100.0, max(0.0, gti)), 2)
 
